@@ -6,15 +6,22 @@ int main()
 int i, j;
 
 // Define matrices A, B, and C
-double A[6] = {1.0, 2.0, 1.0, 4.0, 5.0, 6.0}; // 3x2 matrix
-double B[6] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0}; // 2x3 matrix
-double C[9] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}; // 3x3 matrix
+double A[6] = {1.0, 1.0, 
+               2.0, 2.0, 
+               3.0, 3.0}; // 3x2 matrix
+
+double B[6] = {1.0, 2.0, 3.0, 
+               1.0, 2.0, 3.0}; // 2x3 matrix
+               
+double C[9] = {0.0, 0.0, 0.0, 
+               0.0, 0.0, 0.0, 
+               0.0, 0.0, 0.0}; // 3x3 matrix
 
 // Parameters for dgemm
 int m = 3; // Number of rows in matrices A and C
 int n = 3; // Number of columns in matrices B and C
 int k = 2; // Number of columns in matrix A; number of rows in matrix B
-double alpha = 1.0;
+double alpha = 0.5;
 double beta = 0.0;
 int lda = 2; // Leading dimension of matrix A
 int ldb = 3; // Leading dimension of matrix B
@@ -32,7 +39,7 @@ for (i = 0; i < m; i++)
   
     printf("\n");
     }
-}
+
 
 return 0;
 }
