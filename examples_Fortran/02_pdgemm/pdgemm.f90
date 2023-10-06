@@ -84,17 +84,19 @@ program pdgemm_example
   end if
 
   ! create a desccriptor for the global matrix
-  call descinit( descGlobal, N, N, N, N, izero, izero, ictxt, N,  info );
+  call descinit( descGlobal, N, N, N, N, izero, izero, ictxt, N,  info )
   
   ! redestribute the global matrices to the local ones
   call pdgemr2d(N, N, A,     ione, ione, descGlobal, &
-                      A_loc, ione, ione, descA,  ictxt);
+                      A_loc, ione, ione, descA,  ictxt)
   call pdgemr2d(N, N, B,     ione, ione, descGlobal, &
-                      B_loc, ione, ione, descB,  ictxt);
+                      B_loc, ione, ione, descB,  ictxt)
   
   ! we don't need the global matrices A and B anymore and can deallocate them to save memory
-  deallocate(A);
-  deallocate(B);
+  if (world_rank == 0) then
+  	deallocate(A)
+  	deallocate(B)
+  endif
   !____________________________________________ 
 
   t_start = MPI_Wtime()
