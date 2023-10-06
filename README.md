@@ -1,6 +1,8 @@
 # ScaLAPACK + ELPA tutorial
 This is a tutorial for ScaLAPACK + ELPA for the NOMAD Paphos Summer school 2023
 
+Put your results here: https://docs.google.com/spreadsheets/d/1FD75iSKrf6438bSJUN87SQceCXCQu0beVrNSJtkgZAY/edit?pli=1#gid=0
+
 ## 0. Preparation
 
 Clone this repository to LUMI (you are also welcome to work with your favorite cluster/supercomputer or a laptop).
