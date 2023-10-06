@@ -5,7 +5,7 @@ This is a tutorial for ScaLAPACK + ELPA for the NOMAD Paphos Summer school 2023
 
 Clone this repository to LUMI (you are also welcome to work with your favorite cluster/supercomputer or a laptop).
 ```
-clone https://github.com/karpov-peter/elpa-tutorial.git
+git clone https://github.com/karpov-peter/elpa-tutorial.git
 ```
 
 [Optional] If you want you can install ScaLAPACK (e.g. as provided by Intel MKL) and ELPA to your laptop.
