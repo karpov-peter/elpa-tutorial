@@ -39,11 +39,38 @@ program pdgemm_example
     end if
   end if
 
-  ! Compute grid size
+  !____________________________________________ 
+  ! determine the grid size
+
   nprow = int(sqrt(real(world_size)))
   npcol = world_size / nprow
+  
+  ! if the grid is not square, try to find the "most square" rectangular grid
+  do while (nprow > 0)
+    if (mod(world_size, nprow) == 0) then
+        npcol = world_size / nprow
+        exit
+    end if
+    nprow = nprow - 1
+  end do
+
+  ! specialy treat a case of small matrices
   if (NB > N / max(nprow, npcol)) NB = N / max(nprow, npcol)
 
+  if (nprow * npcol /= world_size) then
+    if (world_rank == 0) then
+        print *, 'ERROR:  wrong grid size'
+    end if
+    call MPI_Finalize(ierror) 
+    stop 1
+  end if
+
+  if (world_rank == 0) then
+    print *, 'world_size= ', world_size
+    print *, 'world_size=', world_size, ', nprow=', nprow, ', npcol=', npcol, ', N=', N, ', NB=', NB
+  end if
+
+  ! ____________________________________________ 
   ! Setup blacs grid
   call blacs_get(-1, 0, ictxt)
   call blacs_gridinit(ictxt, 'Row', nprow, npcol)

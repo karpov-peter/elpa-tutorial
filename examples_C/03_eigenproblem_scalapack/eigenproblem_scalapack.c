@@ -158,23 +158,11 @@ for(; nprow>0; nprow--)
     }
   }
 
-/*
-if (world_size==2)  {nprow=2; npcol=1;}
-if (world_size==6)  {nprow=3; npcol=2;}
-
-if (world_size==10) {nprow=2; npcol=5;}
-if (world_size==20) {nprow=4; npcol=5;}
-if (world_size==40) {nprow=5; npcol=8;}
-
-if (world_size==72) {nprow=8; npcol=9;}
-//if (world_size==72) {nprow=9; npcol=8;}
-//if (world_size==72) {nprow=6; npcol=12;}
+// try some other grids if you want
 //if (world_size==72) {nprow=12; npcol=6;}
 
-if (world_size==72*4) {nprow=8*2; npcol=9*2;}
-*/
-
-if (NB>N/max(nprow,npcol)) NB = N/max(nprow,npcol); // case of small matrices
+// specialy treat a case of small matrices
+if (NB>N/max(nprow,npcol)) NB = N/max(nprow,npcol);
 
 if (nprow*npcol!=world_size)
 	{
@@ -190,7 +178,7 @@ if (world_rank==0) printf("world_size=%i, nprow=%i, npcol=%i, N=%i, nev=%i, NB=%
 
 //____________________________________________ 
 
-// setup Blacs
+// Setup blacs grid
 //Cblacs_pinfo( &iam, &nprocs ) ;
 Cblacs_get( -1, 0, &ictxt );
 Cblacs_gridinit( &ictxt, "Row", nprow, npcol );

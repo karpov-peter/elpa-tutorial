@@ -19,12 +19,16 @@ program eigenproblem_scalapack
   integer :: i_arg, argc
   character(len=32) :: argv
   real(8) :: t0, t1, t2
-  real(8), allocatable :: A(:,:), Z(:,:), W(:)
+  real(8), allocatable :: A_loc(:,:), Z_loc(:,:), Eigenvalues(:)
   integer :: I_loc, J_loc, I_global, J_global
   real(8), allocatable :: WORK(:)
   integer :: LWORK
   integer :: ierr
-  
+  integer :: l_1, x_1, I_gl
+  integer :: l_2, x_2, J_gl
+  ! Assuming the size of A_loc is m_loc by n_loc
+
+
   ! Initialize MPI
   call MPI_Init(ierr)
   call MPI_COMM_SIZE(MPI_COMM_WORLD, world_size, ierr)
@@ -80,26 +84,31 @@ program eigenproblem_scalapack
   m_loc = np
   n_loc = nq
   
-  ! Initialize array descriptors for distributed matrix A and Z
+  ! Initialize array descriptors for distributed matrix A_loc and Z_loc
   CALL DESCINIT(descA, N, N, NB, NB, 0, 0, ictxt, m_loc, info)
   CALL DESCINIT(descZ, N, N, NB, NB, 0, 0, ictxt, m_loc, info)
   
-  ! Allocate local storage for distributed matrix A and Z
-  allocate(A(m_loc, n_loc))
-  allocate(Z(m_loc, n_loc))
+  ! Allocate local storage for distributed matrix A_loc and Z_loc
+  allocate(A_loc(m_loc, n_loc))
+  allocate(Z_loc(m_loc, n_loc))
   
-  ! Fill in the local pieces of A
-  do I_loc = 1, m_loc
-    do J_loc = 1, n_loc
-      ! Get global indices
-      I_global = INDXG2P(I_loc, NB, myrow, 0, nprow) * NB + MOD(I_loc - 1, NB) + 1
-      J_global = INDXG2P(J_loc, NB, mycol, 0, npcol) * NB + MOD(J_loc - 1, NB) + 1
-      A(I_loc, J_loc) = get_global_matrix_element(I_global, J_global)
+  ! Fill in the local pieces of A_loc
+  do i_loc = 1, m_loc
+    l_1 = (i_loc-1)/NB
+    x_1 = mod(i_loc-1, NB)
+    I_gl = (l_1*nprow + myrow)*NB + x_1 + 1
+  
+    do j_loc = 1, n_loc
+      l_2 = (j_loc-1)/NB
+      x_2 = mod(j_loc-1, NB)
+      J_gl = (l_2*npcol + mycol)*NB + x_2 + 1
+  
+      A_loc(i_loc, j_loc) = get_global_matrix_element(I_gl, J_gl, N)
     end do
   end do
   
   ! Now, compute the eigenvalues using ScaLAPACK, depending on the chosen method
-  allocate(W(N))
+  allocate(Eigenvalues(N))
   
   ! Other necessary workspace and lwork computation will be needed here. 
   ! This is a general placeholder and might need adjustments based on the chosen method.
@@ -107,7 +116,7 @@ program eigenproblem_scalapack
   allocate(WORK(LWORK))
   
   if (diagonalization_method == scalapack_pdsyev) then
-    CALL PDSYEV('V', 'U', N, A, ione, ione, descA, W, Z, ione, ione, descZ, WORK, LWORK, info)
+    CALL PDSYEV('V', 'U', N, A_loc, ione, ione, descA, Eigenvalues, Z_loc, ione, ione, descZ, WORK, LWORK, info)
   elseif (diagonalization_method == scalapack_pdsyevd) then
     ! ... PDSYEVD call and necessary adjustments ...
   elseif (diagonalization_method == scalapack_pdsyevr) then
@@ -122,7 +131,7 @@ program eigenproblem_scalapack
   ! You may want to print the eigenvalues or any other results here
   
   ! Clean up and finalize
-  deallocate(A, Z, W, WORK)
+  deallocate(A_loc, Z_loc, Eigenvalues, WORK)
   CALL BLACS_GRIDEXIT(ictxt)
   CALL MPI_FINALIZE(ierr)
   
