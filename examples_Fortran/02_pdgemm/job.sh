@@ -22,8 +22,8 @@
 #SBATCH --partition=small
 ##SBATCH --partition=debug
 
-#SBATCH --mem=2G
-#SBATCH --time=00:01:00
+#SBATCH --mem=12G
+#SBATCH --time=00:02:00
 
 source compile.sh
 

@@ -16,9 +16,9 @@ program pdgemm_example
   integer :: world_rank, world_size, iam, nprocs
   integer :: ictxt, nprow, npcol, myrow, mycol
   integer :: m_loc, n_loc, info, itemp, izero = 0, ione = 1
-  integer :: descA(9), descB(9), descC(9)
+  integer :: descA(9), descB(9), descC(9), descGlobal(9)
   integer :: i, j, print_size, ierror
-  real(dp) :: alpha = 1.0_dp, beta = 0.0_dp
+  real(dp) :: alpha, beta = 0.0_dp
   real(dp), allocatable :: A(:), B(:), C(:)
   real(dp), allocatable :: A_loc(:), B_loc(:), C_loc(:)
   character(len=20) :: arg_str   ! temporary string to hold the argument
@@ -72,8 +72,8 @@ program pdgemm_example
   ! For saving memory, we will fill the global matrices only on 0-th MPI rank
 
   if (world_rank == 0) then
-      allocate(A(N,N))
-      allocate(B(N,N))
+      allocate(A(N*N))
+      allocate(B(N*N))
 
       do J_gl = 1, N
           do I_gl = 1, N
@@ -83,15 +83,35 @@ program pdgemm_example
       end do
   end if
 
-
+  ! create a desccriptor for the global matrix
+  call descinit( descGlobal, N, N, N, N, izero, izero, ictxt, N,  info );
+  
+  ! redestribute the global matrices to the local ones
+  call pdgemr2d(N, N, A,     ione, ione, descGlobal, &
+                      A_loc, ione, ione, descA,  ictxt);
+  call pdgemr2d(N, N, B,     ione, ione, descGlobal, &
+                      B_loc, ione, ione, descB,  ictxt);
+  
+  ! we don't need the global matrices A and B anymore and can deallocate them to save memory
+  deallocate(A);
+  deallocate(B);
   !____________________________________________ 
 
   ! Call pdgemm
-  call pdgemm('N', 'N', N, N, N, alpha, a, ione, ione, desca, b, ione, ione, descb, beta, c, ione, ione, descc)
+  alpha = 1.0_dp/dble(N)
+  beta = 0.0_dp
+  call pdgemm('N', 'N', N, N, N, alpha, A_loc, ione, ione, desca, B_loc, ione, ione, descb, beta, C_loc, ione, ione, descc)
 
+
+  !____________________________________________ 
+  ! redistribute the local matrix C_loc to the global matrix C
+  allocate(C(N*N))
+
+  call pdgemr2d(N, N, C_loc, ione, ione, descC, &
+                  C,     ione, ione, descGlobal, ictxt);
 
   ! Print matrix C
-  print_size = 10
+  print_size = min(10,N)
   if (myrow == 0 .and. mycol == 0) then
     print *, "Upper-left ", print_size, "x", print_size, " corner of the resulting C matrix:"
     do i = 1, print_size
@@ -104,7 +124,10 @@ program pdgemm_example
   end if
 
   ! Cleanup
-  deallocate(a, b, c)
+  deallocate(A_loc)
+  deallocate(B_loc)
+  deallocate(C_loc)
+  deallocate(C)
   call blacs_gridexit(ictxt)
   call mpi_finalize(ierror)
 
