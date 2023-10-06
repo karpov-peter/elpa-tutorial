@@ -23,7 +23,7 @@ program pdgemm_example
   real(dp), allocatable :: A_loc(:), B_loc(:), C_loc(:)
   character(len=20) :: arg_str   ! temporary string to hold the argument
   integer :: I_gl, J_gl
-
+  real(dp) :: t_start, t_stop
   ! Initialize MPI
   call mpi_init(info)
   call mpi_comm_size(mpi_comm_world, world_size, info)
@@ -97,12 +97,15 @@ program pdgemm_example
   deallocate(B);
   !____________________________________________ 
 
+  t_start = MPI_Wtime()
+
   ! Call pdgemm
   alpha = 1.0_dp/dble(N)
   beta = 0.0_dp
   call pdgemm('N', 'N', N, N, N, alpha, A_loc, ione, ione, desca, B_loc, ione, ione, descb, beta, C_loc, ione, ione, descc)
 
-
+  t_stop = MPI_Wtime()
+  
   !____________________________________________ 
   ! redistribute the local matrix C_loc to the global matrix C
   allocate(C(N*N))
@@ -121,6 +124,8 @@ program pdgemm_example
         print *   ! Move to the next line after each row
     end do
     print *  ! Empty line
+  
+    write(*,'("PDGEMM time (sec): ",f8.3)') t_stop-t_start
   end if
 
   ! Cleanup
