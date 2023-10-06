@@ -8,15 +8,15 @@
 #SBATCH -J 01_gemm_big_matrices
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
+#SBATCH --ntasks-per-node=1 # MPI processes
+#SBATCH --cpus-per-task=1   # OpenMP threads
 
 # LUMI-specific
 #SBATCH --account=project_465000539
 
-#SBATCH --partition=debug
-##SBATCH --partition=small
-##SBATCH --reservation=nomad_school_20231006
+##SBATCH --partition=debug
+#SBATCH --partition=small
+#SBATCH --reservation=nomad_school_20231006
 
 ##SBATCH --mem=2G # 2G per core
 #SBATCH --mem=12G

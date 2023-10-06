@@ -68,7 +68,16 @@ program eigenproblem_scalapack
   
   ! determine the grid size
   nprow = nint(sqrt(real(world_size)))
-  nprow = nint(sqrt(real(world_size)))
+  npcol = world_size / nprow
+  
+  ! if the grid is not square, try to find the "most square" rectangular grid
+  do while (nprow > 0)
+    if (mod(world_size, nprow) == 0) then
+        npcol = world_size / nprow
+        exit
+    end if
+    nprow = nprow - 1
+  end do
   
   ! ... More of the grid size calculation ... 
 ! BLACS initialization
@@ -78,13 +87,14 @@ program eigenproblem_scalapack
   call blacs_gridinfo(ictxt, nprow, npcol, myrow, mycol)
   
   ! Compute local size
-  CALL NUMROC(np, N, myrow, 0, nprow, NB)
-  CALL NUMROC(nq, N, mycol, 0, npcol, NB)
+  CALL NUMROC(m_loc, N, myrow, 0, nprow, NB)
+  CALL NUMROC(n_loc, N, mycol, 0, npcol, NB)
   
   m_loc = np
   n_loc = nq
   
   ! Initialize array descriptors for distributed matrix A_loc and Z_loc
+  itemp = max( 1, m_loc );
   CALL DESCINIT(descA, N, N, NB, NB, 0, 0, ictxt, m_loc, info)
   CALL DESCINIT(descZ, N, N, NB, NB, 0, 0, ictxt, m_loc, info)
   
