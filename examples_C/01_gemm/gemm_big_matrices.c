@@ -57,24 +57,6 @@ int main(int argc, char *argv[])
       printf("\n");
       }
 
-    
-    printf("\nLower-right %dx%d corner of the A matrix:\n", print_size, print_size);
-    for (i = N-print_size; i < N; i++) 
-      {
-      for (j = N-print_size; j < N; j++) 
-        printf("%e\t", A[i * (long long int)n + j]);
-      
-      printf("\n");
-      }
-
-    printf("\nLower-right %dx%d corner of the B matrix:\n", print_size, print_size);
-    for (i = N-print_size; i < N; i++) 
-      {
-      for (j = N-print_size; j < N; j++) 
-        printf("%e\t", B[i * (long long int)n + j]);
-      
-      printf("\n");
-      }
 
     printf("\nLower-right %dx%d corner of the resulting C matrix:\n", print_size, print_size);
     for (i = N-print_size; i < N; i++) 
@@ -85,21 +67,6 @@ int main(int argc, char *argv[])
       printf("\n");
       }
 
-
-    for (long long int k=0; k<N*N; k++)
-      {
-      if (C[k] < 0.01)
-        {
-        printf("C[%lld] = %e\n", k, C[k]);
-        break;
-        }
-      }
-
-    long long int bigValue = (long long int) N * (long long int) N - 1;
-    printf("%lld\n", bigValue);
-    printf("A last=%e\n", A[(long long int) N * (long long int) N - 1]);
-    printf("B last=%e\n", B[(long long int) N * (long long int) N - 1]);
-    printf("C last=%e\n", C[(long long int) N * (long long int) N - 1]);
     printf("\nGEMM time: %f\n", t2-t1);
     
     // Free dynamically allocated memory
