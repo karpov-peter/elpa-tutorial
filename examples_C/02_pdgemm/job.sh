@@ -18,9 +18,9 @@
 # LUMI
 #SBATCH --account=project_465000539
 
-##SBATCH --reservation=nomad_school_20231006
-##SBATCH --partition=small
-#SBATCH --partition=debug
+#SBATCH --reservation=nomad_school_20231006
+#SBATCH --partition=small
+##SBATCH --partition=debug
 
 #SBATCH --mem=2G
 #SBATCH --time=00:01:00

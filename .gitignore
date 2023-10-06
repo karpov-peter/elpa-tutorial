@@ -1,5 +1,6 @@
 *.out
 to_do*
+core*
 gemm_big_matrices
 pdgemm
 eigenproblem_scalapack
