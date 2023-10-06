@@ -48,7 +48,7 @@ void pdgemm_ (const char *transa, const char *transb, const int *m , const int *
 int main(int argc, char **argv) 
 {
 //____________________________________________ 
-// setup MPI
+// Initialize MPI
 int world_rank, world_size; // MPI
 
 MPI_Init( &argc, &argv);
@@ -68,6 +68,7 @@ long long int I_gl, J_gl;
 int izero=0, ione=1;
 
 //____________________________________________ 
+// Read command line arguments (assuming arguments are passed as N, NB)
 
 if (argc==1) // one argument was provided: filename (default)
    {
@@ -92,7 +93,7 @@ if (argc==3) // three arguments were provided: filename (default), N, NB
 if (N>100) debug_mode=0; // turn off debug mode for large matrices
 	
 //____________________________________________ 
-// determine the grid size
+// ! Compute grid size
 
 // try to set square grid
 nprow = sqrt(world_size);
@@ -125,7 +126,7 @@ if (world_rank==0) printf("world_size=%i, nprow=%i, npcol=%i, N=%i, NB=%i \n", w
 
 //____________________________________________ 
 
-// setup Blacs
+// Setup blacs grid
 //Cblacs_pinfo( &iam, &nprocs ) ;
 Cblacs_get( -1, 0, &ictxt );
 Cblacs_gridinit( &ictxt, "Row", nprow, npcol );
@@ -142,9 +143,12 @@ descinit_( descA,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 descinit_( descB,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 descinit_( descC,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 
+// Allocate memory for the local matrices
 double *A_loc = (double *)malloc(m_loc * n_loc * sizeof(double));
 double *B_loc = (double *)malloc(m_loc * n_loc * sizeof(double));
 double *C_loc = (double *)malloc(m_loc * n_loc * sizeof(double));
+
+//____________________________________________ 
 
 // Fill global matrices A and B. This is not a very efficient way to do it, 
 // it's better to initialize the local matrices in parallel -- this is covered in the next example
@@ -178,12 +182,19 @@ pdgemr2d_(&N, &N, B,     &ione, &ione, descGlobal,
 free(A);
 free(B);
 
+//____________________________________________ 
 // perform parallel matrix-matrix multiplication
+
+double t_start = MPI_Wtime();
+
 char no = 'N'; // C = A * B, both matrices A and B are not transposed
 double alpha = 1.0/N;
 double beta = 0.0;
 pdgemm_(&no, &no, &N, &N, &N, &alpha, A_loc, &ione, &ione, descA, B_loc, &ione, &ione, descB, &beta, C_loc, &ione, &ione, descC);
 
+double t_stop = MPI_Wtime();
+
+//____________________________________________ 
 // redistribute the local matrix C_loc to the global matrix C
 C = (double *)malloc(N * N * sizeof(double));
 
@@ -213,6 +224,8 @@ if (world_rank==0)
         }
       printf("\n");
       }
+  
+  printf("\nPDGEMM time (sec): \n%g\n", t_stop-t_start);
   }
 
 free(A_loc);

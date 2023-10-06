@@ -29,5 +29,5 @@ source compile.sh
 
 set -v
 
-srun $FileName 1000 32
+srun $FileName 10000 32
 

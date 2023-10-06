@@ -16,19 +16,20 @@ program pdgemm_example
   integer :: world_rank, world_size, iam, nprocs
   integer :: ictxt, nprow, npcol, myrow, mycol
   integer :: m_loc, n_loc, info, itemp, izero = 0, ione = 1
-  integer :: desca(9), descb(9), descc(9)
+  integer :: descA(9), descB(9), descC(9)
   integer :: i, j, print_size, ierror
   real(dp) :: alpha = 1.0_dp, beta = 0.0_dp
   real(dp), allocatable :: A(:), B(:), C(:)
+  real(dp), allocatable :: A_loc(:), B_loc(:), C_loc(:)
   character(len=20) :: arg_str   ! temporary string to hold the argument
-  
+  integer :: I_gl, J_gl
 
   ! Initialize MPI
   call mpi_init(info)
   call mpi_comm_size(mpi_comm_world, world_size, info)
   call mpi_comm_rank(mpi_comm_world, world_rank, info)
 
-  ! Argument handling (assuming arguments are passed as N, NB)
+  !  Read command line arguments (assuming arguments are passed as N, NB)
   if (command_argument_count() >= 1) then
     call get_command_argument(1, arg_str)
     read(arg_str, *) N
@@ -43,26 +44,47 @@ program pdgemm_example
   npcol = world_size / nprow
   if (NB > N / max(nprow, npcol)) NB = N / max(nprow, npcol)
 
-  ! Setup blacs
+  ! Setup blacs grid
   call blacs_get(-1, 0, ictxt)
   call blacs_gridinit(ictxt, 'Row', nprow, npcol)
   call blacs_gridinfo(ictxt, nprow, npcol, myrow, mycol)
 
-  ! Compute local matrix size
+  ! Compute the size of the local matrices (thanks to numroc)
   m_loc = numroc(N, NB, myrow, izero, nprow)
   n_loc = numroc(N, NB, mycol, izero, npcol)
 
-  ! Initialize descriptors
+  ! Initialize the array descriptor for the distributed matrices A/A_loc, B/B_loc, C/C_loc
   itemp = max(1, m_loc)
-  call descinit(desca, N, N, NB, NB, izero, izero, ictxt, itemp, info)
-  call descinit(descb, N, N, NB, NB, izero, izero, ictxt, itemp, info)
-  call descinit(descc, N, N, NB, NB, izero, izero, ictxt, itemp, info)
+  call descinit(descA, N, N, NB, NB, izero, izero, ictxt, itemp, info)
+  call descinit(descB, N, N, NB, NB, izero, izero, ictxt, itemp, info)
+  call descinit(descC, N, N, NB, NB, izero, izero, ictxt, itemp, info)
 
-  ! Allocate and initialize matrices
-  allocate(a(m_loc * n_loc), b(m_loc * n_loc), c(m_loc * n_loc))
-  A = 1.0_dp
-  B = 1.0_dp
-  C = 0.0_dp
+  ! Allocate memory for the local matrices
+  allocate(A_loc(m_loc * n_loc))
+  allocate(B_loc(m_loc * n_loc))
+  allocate(C_loc(m_loc * n_loc))
+  
+
+  !____________________________________________ 
+
+  ! Fill global matrices A and B. This is not a very efficient way to do it, 
+  ! it's better to initialize the local matrices in parallel -- this is covered in the next example
+  ! For saving memory, we will fill the global matrices only on 0-th MPI rank
+
+  if (world_rank == 0) then
+      allocate(A(N,N))
+      allocate(B(N,N))
+
+      do J_gl = 1, N
+          do I_gl = 1, N
+              A(I_gl+ (J_gl-1)*N) = dble(I_gl)
+              B(I_gl+ (J_gl-1)*N) = dble(J_gl)
+          end do
+      end do
+  end if
+
+
+  !____________________________________________ 
 
   ! Call pdgemm
   call pdgemm('N', 'N', N, N, N, alpha, a, ione, ione, desca, b, ione, ione, descb, beta, c, ione, ione, descc)
