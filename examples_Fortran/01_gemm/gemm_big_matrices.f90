@@ -66,4 +66,4 @@ program gemm_big_marices
   ! Deallocate matrices
   deallocate(A, B, C)
 
-end program matrix_mult
+end program

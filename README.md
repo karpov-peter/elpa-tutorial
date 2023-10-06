@@ -1,4 +1,4 @@
-# ScaPAPACK + ELPA tutorial
+# ScaLAPACK + ELPA tutorial
 This is a tutorial for ScaLAPACK + ELPA for the NOMAD Paphos Summer school 2023
 
 ## 0. Preparation
