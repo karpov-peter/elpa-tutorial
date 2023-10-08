@@ -9,7 +9,7 @@
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1 # MPI processes
-#SBATCH --cpus-per-task=1   # OpenMP threads
+#SBATCH --cpus-per-task=4   # OpenMP threads
 
 # LUMI-specific
 #SBATCH --account=project_465000539

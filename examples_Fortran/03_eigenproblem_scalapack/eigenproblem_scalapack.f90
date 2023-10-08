@@ -90,8 +90,6 @@ program eigenproblem_scalapack
   CALL NUMROC(m_loc, N, myrow, 0, nprow, NB)
   CALL NUMROC(n_loc, N, mycol, 0, npcol, NB)
   
-  m_loc = np
-  n_loc = nq
   
   ! Initialize array descriptors for distributed matrix A_loc and Z_loc
   itemp = max( 1, m_loc );
