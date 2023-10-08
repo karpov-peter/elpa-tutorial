@@ -89,7 +89,7 @@ double get_global_matrix_element (int I_gl, int J_gl)
 int main(int argc, char **argv) 
 {
 //____________________________________________ 
-// setup MPI
+// Set up MPI
 int world_rank, world_size; // MPI
 
 MPI_Init( &argc, &argv);
@@ -108,7 +108,8 @@ int descA[9], descZ[9]; // matrix descriptors
 int izero=0, ione=1;
 
 //____________________________________________ 
-
+// Process command-line arguments
+  
 if (argc==1) // one argument was provided: filename (default)
    {
    N = 10;
@@ -134,15 +135,13 @@ if (argc==4) // four arguments were provided: filename (default), N, nev, NB
    NB  = atoi(argv[3]);
    }
 
-//____________________________________________ 
-
 if (N>100) debug_mode=0;
 
 //srand(time(NULL));	
 srand(1); // seeding
 	
 //____________________________________________ 
-// determine the grid size
+// determine the blacs grid size
 
 // try to set square grid
 nprow = sqrt(world_size);
@@ -161,13 +160,12 @@ for(; nprow>0; nprow--)
 // try some other grids if you want
 //if (world_size==72) {nprow=12; npcol=6;}
 
-// specialy treat a case of small matrices
-if (NB>N/max(nprow,npcol)) NB = N/max(nprow,npcol);
+// specially treat a case of small matrices
+if (NB > N/max(nprow,npcol)) NB = N/max(nprow,npcol);
 
-if (nprow*npcol!=world_size)
+if (nprow*npcol != world_size)
 	{
-  if (world_rank==0)
-  printf("ERROR:  wrong grid size \n");
+  if (world_rank==0) printf("Error: wrong grid size \n");
   MPI_Finalize(); 
 	return(1);
   }
@@ -178,18 +176,18 @@ if (world_rank==0) printf("world_size=%i, nprow=%i, npcol=%i, N=%i, nev=%i, NB=%
 
 //____________________________________________ 
 
-// Setup blacs grid
+// Set up blacs grid
 //Cblacs_pinfo( &iam, &nprocs ) ;
 Cblacs_get( -1, 0, &ictxt );
 Cblacs_gridinit( &ictxt, "Row", nprow, npcol );
 Cblacs_gridinfo( ictxt, &nprow, &npcol, &myrow, &mycol );
 
-// Compute the size of the local matrices (thanks to numroc)
-m_loc = numroc_( &N, &NB, &myrow, &izero, &nprow );
-n_loc = numroc_( &N, &NB, &mycol, &izero, &npcol );
+// Compute the size of the local matrices using numroc
+m_loc = numroc_(&N, &NB, &myrow, &izero, &nprow);
+n_loc = numroc_(&N, &NB, &mycol, &izero, &npcol);
 if (debug_mode) printf("myrow=%i, mycol=%i, m_loc=%i, n_loc=%i, \n", myrow, mycol, m_loc, n_loc);
 
-// Initialize the array descriptor for the distributed matrices A, Z
+// Initialize the array descriptor for the distributed matrices A and Z
 itemp = max( 1, m_loc );
 descinit_( descA,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 descinit_( descZ,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
@@ -197,13 +195,13 @@ descinit_( descZ,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 
 double *A_loc, *Z_loc, *Eigenvalues;
 
-// Allocate the matrices A_loc, Z_loc (matrix of eigenvectors), Eigenvalues (vector of eigenvalues)
+// Allocate the matrices A_loc, Z_loc (matrix of eigenvectors), and vector of Eigenvalues
 A_loc = (double *)calloc(m_loc*n_loc, sizeof(double)); // matrix to be diagonalized, local
-Z_loc = (double *)calloc(m_loc*n_loc,sizeof(double));  // matrix of eigenvectors, local
-Eigenvalues = (double *)calloc(N,sizeof(double)); // vector of eigenvalues, global
+Z_loc = (double *)calloc(m_loc*n_loc,sizeof(double));  // matrix of eigenvectors,    local
+Eigenvalues = (double *)calloc(N,sizeof(double));      // vector of eigenvalues,     global
   
-
-// fill the local part of matrix A 
+//____________________________________________ 
+// Fill the local matrix A_loc 
 int i_loc, j_loc;
 for (i_loc = 0; i_loc < m_loc; i_loc+=1)
   {
@@ -220,10 +218,10 @@ for (i_loc = 0; i_loc < m_loc; i_loc+=1)
     }
   }
 
+//____________________________________________ 
 // print the local part of matrix A
 if (debug_mode==1 && world_rank==0)
       {
-      //cout << "A_loc:" << endl;
       printf("A_loc:\n");
       int i_loc, j_loc;
       for(i_loc=0; i_loc<m_loc; i_loc++) 
@@ -232,40 +230,37 @@ if (debug_mode==1 && world_rank==0)
               {
               printf("%g\t", A_loc[i_loc+j_loc*m_loc]);
               }
-          //cout << endl;
           printf("\n");
           }
-      //cout << endl;
       printf("\n");
       }
 
+//____________________________________________ 
+// work -- auxillary array of doubles for pdsyev, pdsyevd, pdsyevr, pdsyevx
+double* work = (double *)malloc(1*sizeof(double));
+int lwork=-1; // size of the work array, to be determined later. We set it to -1 to indicate that we first perform a dry run to determine the optimal size of the work array 
 
-// auxillary array for pdsyev, pdsyevd, pdsyevr, pdsyevx
-double* work = (double *)calloc(2,sizeof(double));
-int lwork=-1;
-
-// auxillary array for pdsyevd, pdsyevr, pdsyevx
+// iwork -- additional auxillary array of integers for pdsyevd, pdsyevr, pdsyevx
+int* iwork = (int *)malloc(1*sizeof(int));
 int liwork=-1;
-int* iwork = (int *)calloc(2,sizeof(int));
 
-double t0, t1;
+double t1, t2;
 
 if (diagonalization_method == scalapack_pdsyev)
   {
-  // "empty" diagonalization run for finding lwork, which is a required size of the array "work"
+  // dry diagonalization run for finding lwork, which is a required size of the array "work"
   pdsyev_( "V", "U", &N, A_loc, &ione, &ione, descA, Eigenvalues, Z_loc, &ione, &ione, descZ, work, &lwork, &info );
-  lwork= (int) work[0];
+  lwork = (int) work[0];
     
   if (debug_mode) printf("lwork=%i", lwork);
   free(work);
-  work = (double *)calloc(lwork, sizeof(double));
+  work = (double *)malloc(lwork*sizeof(double));
     
-  // ED-main run
-  t0 = MPI_Wtime();
+  // actual diagonalization run
+  t1 = MPI_Wtime();
   pdsyev_( "V", "U", &N, A_loc, &ione, &ione, descA, Eigenvalues, Z_loc, &ione, &ione, descZ, work, &lwork, &info );
-  // arguments:
-  // char jobz; //  "N" - only eigenvalues, "V" - eigenvalues and eigenvectors; A-??
-  // char uplo; //  "U" - upper,  "L" - lower triangular matrix
+  // first  argument: "N" - calculate only eigenvalues, "V" - calculate eigenvalues and eigenvectors
+  // second argument: "U" - uses the upper tiangular part, "L" - uses the lower triangular matrix. If the whole matrix is defined, either option can be used, since the matrix is symmetric anyhow
   }
 else if (diagonalization_method == scalapack_pdsyevd)
   {
@@ -276,8 +271,8 @@ else if (diagonalization_method == scalapack_pdsyevd)
   if (debug_mode) printf("world_rank=%d, lwork=%d, liwork=%d\n", world_rank, lwork, liwork);
 
   // Allocate work and iwork arrays with appropriate sizes
-  work  = (double *)calloc( lwork, sizeof(double));
-  iwork = (int *)   calloc(liwork, sizeof(int));
+  work  = (double *) malloc(lwork *sizeof(double));
+  iwork = (int *)    malloc(liwork*sizeof(int));
 
   // ED-main run
   t1 = MPI_Wtime();
@@ -291,33 +286,34 @@ else
   return(1);
   }
 
-double t2 = MPI_Wtime();
+t2 = MPI_Wtime();
 
-
-if (world_rank==0 && info!=0) printf("info pdsyev(d)=%i, error occured!!!\n", info); 
+//____________________________________________ 
+// print the results
 
 if (world_rank==0)
   {
   printf("Diagonalization is done\n");
-  
-  int N_eigenvalues = min(10, nev);
-  printf("First %d eigenvalues: \n", N_eigenvalues);
+  if (info!=0) printf("info pdsyev(d)=%i, error occured!!!\n", info); 
+
+  int N_eigenvalues_print = min(10, nev);
+  printf("First %d eigenvalues: \n", N_eigenvalues_print);
   int i; // for old Intel compilers
-  for (i=0; i<N_eigenvalues; i++) printf("%g ",Eigenvalues[i]);
+  for (i=0; i<N_eigenvalues_print; i++) printf("%g ",Eigenvalues[i]);
   printf("\n");
   
   if (matrix_type==Symmetrized_Clement)
     {
     printf("Absolute diff of eigenvalues wrt to analytic ones: \n");
-    for (i=0; i<N_eigenvalues; i++) printf("%.16g ", Eigenvalues[i] - (-N+1+2*i) );
+    for (i=0; i<N_eigenvalues_print; i++) printf("%.16g ", Eigenvalues[i] - (-N+1+2*i) );
     printf("\n");
     }
   
-  printf("Diagonalization time  (sec): \n%g\n", t2-t1);
+  printf("Diagonalization time  (sec): \n%f\n", t2-t1);
   }
 
 
-// cleanup and finalize
+// Cleanup and finalize
 
 free(A_loc);
 free(Z_loc);
@@ -326,9 +322,7 @@ free(Eigenvalues);
 free(work);
 free(iwork);
 
-
-Cblacs_gridexit(0);
-
+Cblacs_gridexit(ictxt);
 MPI_Finalize();
 
 return(0);
