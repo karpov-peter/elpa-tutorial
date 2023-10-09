@@ -119,7 +119,7 @@ program eigenproblem_scalapack
   ! Compute the size of the local matrices using numroc
   m_loc = numroc(N, NB, myrow, 0, nprow)
   n_loc = numroc(N, NB, mycol, 0, npcol)
-  if (debug_mode) write(*,*) 'myrow=', myrow, ', mycol=', mycol, ', m_loc=', m_loc, ', n_loc=', n_loc
+  if (debug_mode == 0) write(*,*) 'myrow=', myrow, ', mycol=', mycol, ', m_loc=', m_loc, ', n_loc=', n_loc
 
   ! Initialize array descriptors for distributed matrices A and Z
   itemp = max( 1, m_loc );
@@ -176,7 +176,7 @@ program eigenproblem_scalapack
     call pdsyev('V', 'U', N, A_loc, 1, 1, descA, Eigenvalues, Z_loc, 1, 1, descZ, work, lwork, info)
     lwork = int(work(1))
 
-    if (debug_mode) write(*,*) "lwork=", lwork
+    if (debug_mode == 0) write(*,*) "lwork=", lwork
     deallocate(work)
     allocate(work(lwork))
 

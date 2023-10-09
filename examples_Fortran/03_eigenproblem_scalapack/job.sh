@@ -5,7 +5,7 @@
 # Initial working directory:
 #SBATCH -D ./
 # Job name
-#SBATCH -J 02_eigenproblem_scalapack
+#SBATCH -J 03_eigenproblem_scalapack
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
@@ -32,4 +32,4 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 #srun $HOME/pincheck/pincheck
 
-srun $FileName 10000
+srun $FileName 5000 5000 32
