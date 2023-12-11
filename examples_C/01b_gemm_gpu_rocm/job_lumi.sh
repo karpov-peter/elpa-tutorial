@@ -12,9 +12,9 @@
 #SBATCH --cpus-per-task=16
 
 # LUMI-specific
-#SBATCH --account=project_465000539
+#SBATCH --account=project_465000866
 
-#SBATCH --partition=debug
+#SBATCH --partition=standard-g
 ##SBATCH --partition=small
 ##SBATCH --reservation=nomad_school_20231004
 
@@ -23,7 +23,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --time=00:02:00
 
-source compile.sh
+source compile_lumi.sh
 
 set -v
 

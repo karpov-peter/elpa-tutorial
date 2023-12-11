@@ -1,0 +1,19 @@
+C
+
++ 02 - add automatic matrix distribution
+03 - add timings
+04
+
+
+---------------------------------------------------------------------------------
+
+Fortran
+
+02 - add automatic matrix redistribution
+03 - translate to Fortran
+04 - translate to Fortran
+05 - translate to Fortran
+
+---------------------------------------------------------------------------------
+
+add a short description of problems to README

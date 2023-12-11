@@ -1,8 +1,9 @@
 *.out
-to_do*
 core*
 laptop*
 gemm_big_matrices
+gemm_big_matrices_rocm
+gemm_big_matrices_hip
 pdgemm
 eigenproblem_scalapack
 eigenproblem_elpa

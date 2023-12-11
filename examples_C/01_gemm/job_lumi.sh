@@ -12,7 +12,7 @@
 #SBATCH --cpus-per-task=16
 
 # LUMI-specific
-#SBATCH --account=project_465000539
+#SBATCH --account=project_465000866
 
 #SBATCH --partition=debug
 ##SBATCH --partition=small
