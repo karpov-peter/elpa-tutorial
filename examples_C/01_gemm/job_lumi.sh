@@ -30,6 +30,4 @@ set -v
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 #export OMP_PLACES=cores
 
-srun $HOME/pincheck/pincheck
-
 srun $FileName 10000
