@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "cblas.h"
-
 #include <omp.h> // for omp_get_wtime() 
+
+#ifdef USE_MKL
+#include <mkl_cblas.h>
+#else
+#include "cblas.h"
+#endif
 
 int main(int argc, char *argv[]) 
 {
