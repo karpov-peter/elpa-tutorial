@@ -265,6 +265,9 @@ itemp = max( 1, m_loc );
 descinit_( descA,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 descinit_( descZ,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 
+//____________________________________________ 
+// Print settings
+elpa_print_settings(handle, &error);
 
 //____________________________________________ 
 // Perform the diagonalization using ELPA
