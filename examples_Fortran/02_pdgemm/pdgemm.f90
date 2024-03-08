@@ -110,7 +110,7 @@ program pdgemm_example
       end do
   end if
 
-  ! create a desccriptor for the global matrix
+  ! create a descriptor for the global matrix
   call descinit( descGlobal, N, N, N, N, izero, izero, ictxt, N,  info )
   
   ! redestribute the global matrices to the local ones
