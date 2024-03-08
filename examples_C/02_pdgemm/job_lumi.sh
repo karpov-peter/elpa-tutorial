@@ -25,7 +25,7 @@
 #SBATCH --mem=2G
 #SBATCH --time=00:01:00
 
-source compile.sh
+source compile_lumi.sh
 
 set -v
 

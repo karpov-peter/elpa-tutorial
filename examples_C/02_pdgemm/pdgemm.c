@@ -14,7 +14,7 @@ static int min( int a, int b ){if (a<b) return(a); else return(b);}
 int N = 1000; // matrix size
 int NB = 32; // block size
 
-int debug_mode=0;
+int debug_mode=1;
 
 //__________________________________________________________________________________
 // blacs functions
@@ -78,13 +78,13 @@ if (argc==1) // one argument was provided: filename (default)
    
 if (argc==2) // two arguments were provided: filename (default), N
    {
-   N   = atoi(argv[1]);
+   N  = atoi(argv[1]);
    NB = 2;
    }
 
 if (argc==3) // three arguments were provided: filename (default), N, NB
    {
-   N   = atoi(argv[1]);
+   N  = atoi(argv[1]);
    NB = atoi(argv[2]);
    }
 
@@ -148,6 +148,8 @@ double *A_loc = (double *)malloc(m_loc * n_loc * sizeof(double));
 double *B_loc = (double *)malloc(m_loc * n_loc * sizeof(double));
 double *C_loc = (double *)malloc(m_loc * n_loc * sizeof(double));
 
+printf("1 world_size= %i \n", world_size);
+
 //____________________________________________ 
 
 // Fill global matrices A and B. This is not a very efficient way to do it, 
@@ -169,7 +171,16 @@ if (world_rank==0)
     }
   }
 
-// create a desccriptor for the global matrix
+printf("2 world_size= %i \n", world_size);
+
+// create a descriptor for the global matrix
+// ! Initialize the descriptor for the global mxn matrices a_0:
+// ! The full descriptor has to be defined only on the process 0, on which
+// ! the global matrix is defined.
+// ! On all other processes desca_0(2)=-1 must be specified
+//descGlobal[1]=-1;
+//if (world_rank==0) descinit_( descGlobal, &N, &N, &N, &N, &izero, &izero, &ictxt, &N, &info );
+
 descinit_( descGlobal, &N, &N, &N, &N, &izero, &izero, &ictxt, &N, &info );
 
 // redestribute the global matrices to the local ones
@@ -178,10 +189,16 @@ pdgemr2d_(&N, &N, A,     &ione, &ione, descGlobal,
 pdgemr2d_(&N, &N, B,     &ione, &ione, descGlobal,
                   B_loc, &ione, &ione, descB,  &ictxt);
 
-// we don't need the global matrices A and B anymore and can deallocate them to save memory
-free(A);
-free(B);
+printf("3 world_size= %i \n", world_size);
 
+// we don't need the global matrices A and B anymore and can deallocate them to save memory
+if (world_rank==0)
+  {
+  free(A);
+  free(B);
+  }
+
+printf("4 world_size= %i \n", world_size);
 //____________________________________________ 
 // perform parallel matrix-matrix multiplication
 
@@ -193,13 +210,17 @@ double beta = 0.0;
 pdgemm_(&no, &no, &N, &N, &N, &alpha, A_loc, &ione, &ione, descA, B_loc, &ione, &ione, descB, &beta, C_loc, &ione, &ione, descC);
 
 double t_stop = MPI_Wtime();
+if (world_rank==0) printf("pdgemm done \n");
 
 //____________________________________________ 
 // redistribute the local matrix C_loc to the global matrix C
-C = (double *)malloc(N * N * sizeof(double));
+if (world_rank==0)
+  {
+  C = (double *)malloc(N * N * sizeof(double));
+  }
 
-pdgemr2d_(&N, &N, C_loc,&ione, &ione, descC,
-                  C,    &ione, &ione, descGlobal,  &ictxt);
+pdgemr2d_(&m_loc, &n_loc, C_loc,&ione, &ione, descC,
+                          C,    &ione, &ione, descGlobal,  &ictxt);
 
 // Output C matrix for the process with row 0 and col 0
 if (world_rank==0)
@@ -231,7 +252,7 @@ if (world_rank==0)
 free(A_loc);
 free(B_loc);
 free(C_loc);
-free(C);
+if (world_rank==0) free(C);
 
 Cblacs_gridexit(ictxt);
 MPI_Finalize();
