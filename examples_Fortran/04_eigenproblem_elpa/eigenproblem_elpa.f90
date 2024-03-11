@@ -1,6 +1,8 @@
 ! Include MPI and BLACS modules
 program eigenproblem_scalapack
   use mpi
+  ! Step 1: use the ELPA module
+  use elpa
   implicit none
   
   ! Explicit interface for numroc
@@ -9,6 +11,10 @@ program eigenproblem_scalapack
       integer, intent(in) :: N, NB, iproc, isrcproc, nprocs
     end function numroc
   end interface
+  
+  ! Step 2: define a handle for an ELPA object
+  class(elpa_t), pointer :: elpaInstance
+  integer :: status
 
   ! Declare global variables
   integer, parameter :: N_DEFAULT = 1000, NEV_DEFAULT = 500, NB_DEFAULT = 32
@@ -30,14 +36,11 @@ program eigenproblem_scalapack
   real(8) :: t0, t1, t2
   real(8), allocatable :: A_loc(:,:), Z_loc(:,:), Eigenvalues(:)
   integer :: I_loc, J_loc, I_global, J_global
-  real(8), allocatable ::  work(:)
-  integer, allocatable :: iwork(:)
   integer :: lwork, liwork
   integer :: ierr
   integer :: l_1, x_1, I_gl
   integer :: l_2, x_2, J_gl
   integer :: i, N_eigenvalues_print
-  ! Assuming the size of A_loc is m_loc by n_loc
 
   ! ____________________________________________
   ! Set up MPI
@@ -109,7 +112,6 @@ program eigenproblem_scalapack
   print *, "N=", N, ", nev=", nev, ", NB=", NB
 
   ! ____________________________________________ 
-
   ! Set up blacs grid
   call blacs_pinfo(iam, nprocs)
   call blacs_get(0, 0, ictxt)
@@ -127,6 +129,64 @@ program eigenproblem_scalapack
   call descinit(descA, N, N, NB, NB, 0, 0, ictxt, itemp, info)
   call descinit(descZ, N, N, NB, NB, 0, 0, ictxt, itemp, info)
 
+  ! ____________________________________________ 
+  ! Setup ELPA 
+  
+  ! Step 3: initialize the ELPA library
+  if (elpa_init(20170403) /= ELPA_OK) then
+    print *, "ELPA API version not supported"
+    stop 1
+  endif
+  
+  ! Step 4: allocate the ELPA object
+  elpaInstance => elpa_allocate(status)
+  ! Check status code, e.g. with
+  if (status /= ELPA_OK) then
+    print *, "Could not allocate ELPA instance"
+    stop 1
+  endif
+
+  ! Step 5: set mandatory parameters describing the matrix and its MPI distribution
+  ! This can be done only once per ELPA object (handle)
+  call elpaInstance%set("na", N, status)
+  if (status /= ELPA_OK) then
+    print *, "Could not set parameter na"
+    ! Handle this error in your application
+  endif
+  
+  call elpaInstance%set("nev", nev, status)
+  ! Check status code ...
+  
+  call elpaInstance%set("local_nrows", m_loc, status)
+  ! Check status code ...
+  
+  call elpaInstance%set("local_ncols", n_loc, status)
+  ! Check status code ...
+  
+  call elpaInstance%set("nblk", NB, status)
+  ! Check status code ...
+  
+  call elpaInstance%set("mpi_comm_parent", MPI_COMM_WORLD, status)
+  ! Check status code ...
+  
+  call elpaInstance%set("process_row", myrow, status)
+  ! Check status code ...
+  
+  call elpaInstance%set("process_col", mycol, status)
+  ! Check status code ...
+
+  ! Step 6: set up the elpa object, finalize setting of mandatory parameters
+  status = elpaInstance%setup()
+  if (status /= ELPA_OK) then
+    print *, "Could not setup the ELPA object"
+    ! Handle this error in your application
+  endif
+
+  ! Step 7: set runtime options, e.g. GPU settings
+  call elpaInstance%set("solver", ELPA_SOLVER_2STAGE, status)
+  ! Check status code ...
+
+  ! End of Setup ELPA 
   ! ____________________________________________ 
   ! Allocate the matrices A_loc, Z_loc (matrix of eigenvectors), and vector of Eigenvalues
   allocate(A_loc(m_loc, n_loc)) ! matrix to be diagonalized, local
@@ -162,46 +222,25 @@ program eigenproblem_scalapack
   end if
 
   ! ____________________________________________ 
-  ! work -- auxillary array of doubles for pdsyev, pdsyevd, pdsyevr, pdsyevx
-  allocate(work(1))
-  lwork=-1 ! size of the work array, to be determined later. We set it to -1 to indicate that we first perform a dry run to determine the optimal size of the work array 
+  ! Print ELPA settings
+  call elpaInstance%print_settings(status)
 
-  ! iwork -- additional auxillary array of integers for pdsyevd, pdsyevr, pdsyevx
-  allocate(iwork(1))
-  liwork=-1 
-
+  ! ____________________________________________ 
+  ! Step 8: Perform the diagonalization using ELPA
   
-  if (diagonalization_method == scalapack_pdsyev) then
-    ! dry diagonalization run for finding lwork, which is a required size of the array "work"
-    call pdsyev('V', 'U', N, A_loc, 1, 1, descA, Eigenvalues, Z_loc, 1, 1, descZ, work, lwork, info)
-    lwork = int(work(1))
+  call MPI_Barrier(MPI_COMM_WORLD, ierr) ! for timing
+  t1 = MPI_Wtime()
 
-    if (debug_mode == 0) write(*,*) "lwork=", lwork
-    deallocate(work)
-    allocate(work(lwork))
-
-    ! actual diagonalization run
-    t1 = MPI_Wtime()
-    call pdsyev('V', 'U', N, A_loc, 1, 1, descA, Eigenvalues, Z_loc, 1, 1, descZ, work, lwork, info)
-
-  else if (diagonalization_method == scalapack_pdsyevd) then
-    ! ... PDSYEVD call and necessary adjustments ...
-  else if (diagonalization_method == scalapack_pdsyevr) then
-    ! ... PDSYEVR call and necessary adjustments ...
-  else if (diagonalization_method == scalapack_pdsyevx) then
-    ! ... PDSYEVX call and necessary adjustments ...
-  else
-    print *, "Unknown diagonalization method!"
-    call exit(1)
-  end if
-  
+  call elpaInstance%eigenvectors(A_loc, Eigenvalues, Z_loc, status)
+    
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   t2 = MPI_Wtime()
 
   ! ____________________________________________ 
-  ! print the results
+  ! Print the results
   if (world_rank == 0) then
     write(*,*) "Diagonalization is done"
-    if (info /= 0) write(*,*) "info pdsyev(d)=", info, " error occured!!!"
+    if (status /= ELPA_OK) write(*,*) "ELPA status=", status, " error occured!!!"
 
     N_eigenvalues_print = min(10, nev)
     write(*,*) "First ", N_eigenvalues_print, " eigenvalues: "
@@ -220,15 +259,20 @@ program eigenproblem_scalapack
 
     write(*,*) "Diagonalization time  (sec): "
     write(*,*) t2 - t1
-end if
+  end if
 
-  ! Clean up and finalize
+  ! ____________________________________________ 
+  ! Step 9: Clean up ELPA
+
+  call elpa_deallocate(elpaInstance, status)
+  ! Check status code ...
+  call elpa_uninit()
+
+  ! ____________________________________________ 
+  ! Clean up the rest and finalize
   deallocate(A_loc) 
   deallocate(Z_loc)
   deallocate(Eigenvalues)
-  
-  deallocate(work)
-  deallocate(iwork)
   
   call blacs_gridexit(ictxt)
   call MPI_Finalize(ierr)

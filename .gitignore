@@ -1,6 +1,6 @@
 *.out
 core*
-laptop*
+compile_laptop.sh
 gemm_big_matrices
 gemm_big_matrices_rocm
 gemm_big_matrices_hip

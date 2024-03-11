@@ -5,9 +5,10 @@
 #include <math.h>
 #include "mpi.h"
 
+// Step 1: include the ELPA header file
 #include <elpa/elpa.h>
-#include <assert.h>
 
+#include <assert.h>
 #define assert_elpa_ok(x) assert(x == ELPA_OK)
 
 static int max( int a, int b ){if (a>b) return(a); else return(b);}
@@ -15,9 +16,9 @@ static int min( int a, int b ){if (a<b) return(a); else return(b);}
 
 //__________________________________________________________________________________
 
-int N = 1000;
-int nev=64;
-int NB = 32; 
+int N   = 1000;
+int nev = 64;
+int NB  = 32; 
 
 int debug_mode=0;
 
@@ -40,7 +41,6 @@ int    numroc_( int *n, int *NB, int *iproc, int *isrcproc, int *world_size);
 void   descinit_( int *desc, int *m, int *n, int *mb, int *NB, int *irsrc, int *icsrc, int *ictxt, int *lld, int *info);
 
 //__________________________________________________________________________________
-
 
 double get_global_matrix_element (int I_gl, int J_gl)
    {
@@ -77,7 +77,7 @@ int world_rank, world_size; // MPI
 
 // For hybrid MPI+OpenMP
 //int thread_level;
-//MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &thread_level); 
+//MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &thread_level); 
 
 // For pure MPI
 MPI_Init( &argc, &argv);
@@ -156,7 +156,7 @@ if (world_rank==0) printf("world_size=%i, nprow=%i, npcol=%i, N=%i, nev=%i, NB=%
 // Setup BLACS
 Cblacs_pinfo( &world_rank, &world_size ) ;
 Cblacs_get( -1, 0, &ictxt );
-Cblacs_gridinit( &ictxt, "Row", nprow, npcol ); // "Row" or "Col" is the ordering of the processes in the grid. ELPA works with either of them
+Cblacs_gridinit( &ictxt, "Col", nprow, npcol ); // "Row" or "Col" is the ordering of the processes in the grid. ELPA works with either of them
 Cblacs_gridinfo( ictxt, &nprow, &npcol, &myrow, &mycol );
 
 // Compute the size of the local matrices A_loc, Z_loc (thanks to numroc)
@@ -164,13 +164,19 @@ m_loc = numroc_( &N, &NB, &myrow, &izero, &nprow );
 n_loc = numroc_( &N, &NB, &mycol, &izero, &npcol );
 if (debug_mode) printf("myrow=%i, mycol=%i, m_loc=%i, n_loc=%i, \n", myrow, mycol, m_loc, n_loc);
 
+// Initialize the array descriptors descA and descZ for the distributed matrices A and Z
+itemp = max( 1, m_loc );
+descinit_( descA,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
+descinit_( descZ,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
+
 //____________________________________________ 
+// Setup ELPA 
 
-/* Setup ELPA */
-///*
-int error, status;
+// Step 2: define a handle for an ELPA object
 elpa_t handle;
+int status;
 
+// Step 3: initialize the ELPA library
 status = elpa_init(20170403);   
 if (status != ELPA_OK) 
 	{
@@ -179,54 +185,59 @@ if (status != ELPA_OK)
 	exit(1);
 	}
 
-handle = elpa_allocate(&error);
-assert_elpa_ok(error);
+// Step 4: allocate the ELPA object
+handle = elpa_allocate(&status);
+if (status != ELPA_OK) 
+	{
+	fprintf(stderr, "Error: cannot allocate the ELPA object");
+  MPI_Finalize();
+	exit(1);
+	}
 
-// Set ELPA mandatory parameters. This can be done only once per ELPA object (handle)
-elpa_set_integer(handle, "na", N, &error); // matrix dimension
-if (world_rank==0 || debug_mode) printf("na=%i is set, error=%i\n", N, error);
+// Step 5: set mandatory parameters describing the matrix and its MPI distribution
+// This can be done only once per ELPA object (handle)
+elpa_set(handle, "na", N, &status); // matrix dimension
+if (world_rank==0 || debug_mode) printf("na=%i is set, status=%i\n", N, status);
 
-elpa_set_integer(handle, "nev", nev, &error); // number of eigenvectors to be calculated (all eigenvalues are calculated regardless this setting)
-if (world_rank==0 || debug_mode) printf("nev=%i is set, error=%i\n", nev, error);
+elpa_set(handle, "nev", nev, &status); // number of eigenvectors to be calculated (all eigenvalues are calculated regardless this setting)
+if (world_rank==0 || debug_mode) printf("nev=%i is set, status=%i\n", nev, status);
 
-elpa_set_integer(handle, "local_nrows", m_loc, &error); // m_loc
-if (world_rank==0 || debug_mode) printf("local_nrows=%i is set, error=%i\n", m_loc, error);
+elpa_set(handle, "local_nrows", m_loc, &status); // m_loc
+if (world_rank==0 || debug_mode) printf("local_nrows=%i is set, status=%i\n", m_loc, status);
 
-elpa_set_integer(handle, "local_ncols", n_loc, &error); // n_loc
-if (world_rank==0 || debug_mode) printf("local_ncols=%i is set, error=%i\n", n_loc, error);
+elpa_set(handle, "local_ncols", n_loc, &status); // n_loc
+if (world_rank==0 || debug_mode) printf("local_ncols=%i is set, status=%i\n", n_loc, status);
 
-elpa_set_integer(handle, "nblk", NB, &error); // NB
-if (world_rank==0 || debug_mode) printf("nblk=%i is set, error=%i\n", NB, error);
+elpa_set(handle, "nblk", NB, &status); // NB
+if (world_rank==0 || debug_mode) printf("nblk=%i is set, status=%i\n", NB, status);
 
-elpa_set_integer(handle, "mpi_comm_parent", MPI_Comm_c2f(MPI_COMM_WORLD), &error);
-if (world_rank==0 || debug_mode) printf("Fortran MPI communicator is set, error=%i\n", error);
+elpa_set(handle, "mpi_comm_parent", MPI_Comm_c2f(MPI_COMM_WORLD), &status);
+if (world_rank==0 || debug_mode) printf("Fortran MPI communicator is set, status=%i\n", status);
 
-elpa_set_integer(handle, "process_row", myrow, &error); // myrow
-if (world_rank==0 || debug_mode) printf("process_row=%i is set, error=%i\n", myrow, error);
+elpa_set(handle, "process_row", myrow, &status); // myrow
+if (world_rank==0 || debug_mode) printf("process_row=%i is set, status=%i\n", myrow, status);
 
-elpa_set_integer(handle, "process_col", mycol, &error); // mycol
-if (world_rank==0 || debug_mode) printf("process_col=%i is set, error=%i\n", mycol, error);
+elpa_set(handle, "process_col", mycol, &status); // mycol
+if (world_rank==0 || debug_mode) printf("process_col=%i is set, status=%i\n", mycol, status);
 
-// Finialize the setup of mandatory parameters of the ELPA object (handle)
+// Step 6: Finialize the setup of mandatory parameters of the ELPA object (handle)
 status = elpa_setup(handle);
-printf("ELPA setup done, error=%i\n", status);
+printf("ELPA setup done, status=%i\n", status);
 if (status!=ELPA_OK)
   {
-  printf("elpa_setup() failed, error=%i\n", status);
+  printf("elpa_setup() failed, status=%i\n", status);
   MPI_Finalize();
   return(1);
   }
 
-// Set ELPA tunables. They can be changed between different ELPA runs, e.g. elpa_eigenvectors() calls
-elpa_set_integer(handle, "solver", ELPA_SOLVER, &error);
+// Step 7: set ELPA runtime options. They can be changed between different ELPA runs, e.g. elpa_eigenvectors() calls
+elpa_set(handle, "solver", ELPA_SOLVER, &status);
 if (world_rank==0 || debug_mode) 
   {
-  printf("elpa_set solver done, error=%d \n", error);
+  printf("elpa_set solver done, status=%d \n", status);
   if (ELPA_SOLVER == ELPA_SOLVER_1STAGE) printf("ELPA_SOLVER_1STAGE \n");
   if (ELPA_SOLVER == ELPA_SOLVER_2STAGE) printf("ELPA_SOLVER_2STAGE \n");
-  }
-  
-MPI_Barrier(MPI_COMM_WORLD);   
+  }  
 
 // End of Setup ELPA 
 //____________________________________________ 
@@ -259,33 +270,29 @@ for(int i_loc=0; i_loc<m_loc; i_loc++) // iteration over rows of A_loc
         }
     }
 
-      
-// Initialize the array descriptors descA and descZ for the distributed matrices A and Z
-itemp = max( 1, m_loc );
-descinit_( descA,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
-descinit_( descZ,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
+//____________________________________________ 
+// Print ELPA settings
+elpa_print_settings(handle, &status);
 
 //____________________________________________ 
-// Print settings
-elpa_print_settings(handle, &error);
+// Step 8: Perform the diagonalization using ELPA
 
-//____________________________________________ 
-// Perform the diagonalization using ELPA
-
+MPI_Barrier(MPI_COMM_WORLD); // for timing
 double t_start = MPI_Wtime();
 
 // A_loc=local part of the matrix to be diagonalized, input
 // Eigenvalues=global array of eigenvalues, output
 // Z_loc=matrix of eigenvectors (contained as columns), output
-elpa_eigenvectors(handle, A_loc, Eigenvalues, Z_loc, &error); 
+elpa_eigenvectors(handle, A_loc, Eigenvalues, Z_loc, &status); 
 
-if (error!=ELPA_OK)
+if (status!=ELPA_OK)
   {
-  printf("elpa_eigenvectors() failed, error=%i\n", error);
+  printf("elpa_eigenvectors() failed, status=%i\n", status);
   MPI_Finalize();
   return(1);
   }
 
+MPI_Barrier(MPI_COMM_WORLD);
 double t_stop = MPI_Wtime();
 	
 //____________________________________________ 
@@ -312,17 +319,19 @@ if (world_rank==0)
   }
 
 //____________________________________________ 
-// Clean up
+// Step 9: Clean up ELPA
+
+elpa_deallocate(handle, &status);
+elpa_uninit(&status);
+
+//____________________________________________ 
+// Clean up the rest and finalize
 
 free(A_loc);
 free(Z_loc);
 free(Eigenvalues);
 
 Cblacs_gridexit(0);
-
-elpa_deallocate(handle, &error);
-elpa_uninit(&error);
-		
 MPI_Finalize();
 
 return(0);
