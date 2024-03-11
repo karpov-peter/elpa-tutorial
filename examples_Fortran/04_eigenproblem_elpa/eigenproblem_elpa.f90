@@ -52,25 +52,25 @@ program eigenproblem_scalapack
   ! Process command-line arguments
   argc = command_argument_count()
   
-  if (argc == 1) then
+  if (argc == 0) then
     N = 10
+    nev = N
+  end if
+  
+  if (argc == 1) then
+    call get_command_argument(1, argv)
+    read(argv, *) N
     nev = N
   end if
   
   if (argc == 2) then
     call get_command_argument(1, argv)
     read(argv, *) N
-    nev = N
-  end if
-  
-  if (argc == 3) then
-    call get_command_argument(1, argv)
-    read(argv, *) N
     call get_command_argument(2, argv)
     read(argv, *) nev
   end if
   
-  if (argc == 4) then
+  if (argc >= 3) then
     call get_command_argument(1, argv)
     read(argv, *) N
     call get_command_argument(2, argv)
@@ -245,7 +245,7 @@ program eigenproblem_scalapack
     N_eigenvalues_print = min(10, nev)
     write(*,*) "First ", N_eigenvalues_print, " eigenvalues: "
     do i = 1, N_eigenvalues_print
-        write(*, '(f10.5, " ")', advance='no') Eigenvalues(i)
+        write(*, '(e23.16, " ")', advance='no') Eigenvalues(i)
     end do
     write(*,*)
 
