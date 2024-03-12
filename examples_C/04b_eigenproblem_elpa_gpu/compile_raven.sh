@@ -15,4 +15,4 @@ CUDA_LIBS="-L$CUDA_HOME/lib64 -lcudart -lcuda -lm -Wl,-rpath=$CUDA_HOME/lib64"
 
 FileName="eigenproblem_elpa_gpu"
 
-mpigcc -I$ELPA_INCLUDE_DIR -I$MKL_HOME/include -I$CUDA_HOME/include $FileName.c -o $FileName $ELPA_LIBS $CUDA_LIBS
+mpigcc -I$ELPA_INCLUDE_DIR -I$MKLROOT/include -I$CUDA_HOME/include $FileName.c -o $FileName $ELPA_LIBS $CUDA_LIBS
