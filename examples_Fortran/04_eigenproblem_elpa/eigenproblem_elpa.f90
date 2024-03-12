@@ -1,5 +1,4 @@
-! Include MPI and BLACS modules
-program eigenproblem_scalapack
+program eigenproblem_elpa
   use mpi
   ! Step 1: use the ELPA module
   use elpa
@@ -20,11 +19,6 @@ program eigenproblem_scalapack
   integer, parameter :: N_DEFAULT = 1000, NEV_DEFAULT = 500, NB_DEFAULT = 32
   integer :: N = N_DEFAULT, nev = NEV_DEFAULT, NB = NB_DEFAULT
   integer :: debug_mode = 0
-  integer, parameter :: scalapack_pdsyev  = 1, &
-                        scalapack_pdsyevd = 2, &
-                        scalapack_pdsyevr = 3, &
-                        scalapack_pdsyevx = 4
-  integer :: diagonalization_method = scalapack_pdsyev
   
   integer :: world_rank, world_size
   integer :: iam, nprocs, ictxt, nprow, npcol, myrow, mycol
@@ -134,7 +128,7 @@ program eigenproblem_scalapack
   
   ! Step 3: initialize the ELPA library
   if (elpa_init(20170403) /= ELPA_OK) then
-    print *, "ELPA API version not supported"
+      print *, "ELPA API version not supported"
     stop 1
   endif
   
