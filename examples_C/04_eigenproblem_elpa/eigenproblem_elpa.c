@@ -25,8 +25,6 @@ int debug_mode=0;
 enum matrix_types {Symmetrized_Clement, Random_0_1};
 enum matrix_types matrix_type = Symmetrized_Clement;
 
-int ELPA_SOLVER = ELPA_SOLVER_2STAGE;
-
 //__________________________________________________________________________________
 // BLACS routines
 void   Cblacs_pinfo( int* mypnum, int* world_size);
@@ -194,6 +192,7 @@ if (status != ELPA_OK)
 	exit(1);
 	}
 
+//____________________________________________ 
 // Step 5: set mandatory parameters describing the matrix and its MPI distribution
 // This can be done only once per ELPA object (handle)
 elpa_set(handle, "na", N, &status); // matrix dimension
@@ -231,12 +230,10 @@ if (status!=ELPA_OK)
   }
 
 // Step 7: set ELPA runtime options. They can be changed between different ELPA runs, e.g. elpa_eigenvectors() calls
-elpa_set(handle, "solver", ELPA_SOLVER, &status);
+elpa_set(handle, "solver", ELPA_SOLVER_2STAGE, &status);
 if (world_rank==0 || debug_mode) 
   {
   printf("elpa_set solver done, status=%d \n", status);
-  if (ELPA_SOLVER == ELPA_SOLVER_1STAGE) printf("ELPA_SOLVER_1STAGE \n");
-  if (ELPA_SOLVER == ELPA_SOLVER_2STAGE) printf("ELPA_SOLVER_2STAGE \n");
   }  
 
 // End of Setup ELPA 
