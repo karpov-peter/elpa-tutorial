@@ -16,9 +16,10 @@ static int min( int a, int b ){if (a<b) return(a); else return(b);}
 
 //__________________________________________________________________________________
 
-int N   = 1000;
-int nev = 64;
-int NB  = 32; 
+// Default values
+int N   = 1000; // matrix size is NxN
+int nev = 500; // number of eigenvalues to be calculated
+int NB  = 32; // block size
 
 int debug_mode=0;
 
@@ -69,51 +70,43 @@ double get_global_matrix_element (int I_gl, int J_gl)
 	
 int main(int argc, char **argv) 
 {
+int world_rank, world_size; // MPI
+int ictxt, nprow, npcol, myrow, mycol; // BLACS grid
+int descA[9], descZ[9], info, itemp; // BLACS array descriptor
+int m_loc, n_loc; // local matrix dimensions
+int izero=0;
+
 //____________________________________________ 
 // Setup MPI
-int world_rank, world_size; // MPI
-
-// For hybrid MPI+OpenMP
-//int thread_level;
-//MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &thread_level); 
 
 // For pure MPI
 MPI_Init( &argc, &argv);
+
+// For hybrid MPI+OpenMP
+//int thread_level;
+//MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &thread_level); 
 
 MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 //____________________________________________ 
-
-int ictxt, nprow, npcol, myrow, mycol;
-int np, nq;
-int m_loc, n_loc;
-int info, itemp, seed, lwork;
-int descA[9], descZ[9];
-int izero=0;
-
-//____________________________________________ 
 // Parse command line arguments
-
-if (argc==1) // one argument was provided: filename (default)
-   {
-   N = 10;
-   nev = N;
-   }
    
 if (argc==2) // two arguments were provided: filename (default), N (matrix size)
    {
    N   = atoi(argv[1]);
    nev = N;
+   NB = min(N, NB);
    }
 
 if (argc==3) // three arguments were provided: filename (default), N (matrix size), nev
    {
    N   = atoi(argv[1]);
    nev = atoi(argv[2]);
+   NB = min(N, NB);
    }
 
-if (argc==4) // four arguments were provided: filename (default), N (matrix size), nev, NB ()
+if (argc==4) // four arguments were provided: filename (default), N (matrix size), nev, NB
    {
    N   = atoi(argv[1]);
    nev = atoi(argv[2]);
@@ -151,10 +144,9 @@ if (world_rank==0) printf("world_size=%i, nprow=%i, npcol=%i, N=%i, nev=%i, NB=%
 
 //____________________________________________ 
 	
-// Setup BLACS
-Cblacs_pinfo( &world_rank, &world_size ) ;
+// Setup BLACS grid
 Cblacs_get( -1, 0, &ictxt );
-Cblacs_gridinit( &ictxt, "Col", nprow, npcol ); // "Row" or "Col" is the ordering of the processes in the grid. ELPA works with either of them
+Cblacs_gridinit( &ictxt, "C", nprow, npcol ); // "R" or "C" for Row or Column the ordering of the processes in the grid. ELPA works with either of them
 Cblacs_gridinfo( ictxt, &nprow, &npcol, &myrow, &mycol );
 
 // Compute the size of the local matrices A_loc, Z_loc (thanks to numroc)
@@ -166,6 +158,7 @@ if (debug_mode) printf("myrow=%i, mycol=%i, m_loc=%i, n_loc=%i, \n", myrow, myco
 itemp = max( 1, m_loc );
 descinit_( descA,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
 descinit_( descZ,  &N, &N, &NB, &NB, &izero, &izero, &ictxt, &itemp, &info );
+assert(info == 0);
 
 //____________________________________________ 
 // Setup ELPA 
@@ -196,30 +189,33 @@ if (status != ELPA_OK)
 // Step 5: set mandatory parameters describing the matrix and its MPI distribution
 // This can be done only once per ELPA object (handle)
 elpa_set(handle, "na", N, &status); // matrix dimension
-if (world_rank==0 || debug_mode) printf("na=%i is set, status=%i\n", N, status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "nev", nev, &status); // number of eigenvectors to be calculated (all eigenvalues are calculated regardless this setting)
-if (world_rank==0 || debug_mode) printf("nev=%i is set, status=%i\n", nev, status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "local_nrows", m_loc, &status); // m_loc
-if (world_rank==0 || debug_mode) printf("local_nrows=%i is set, status=%i\n", m_loc, status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "local_ncols", n_loc, &status); // n_loc
-if (world_rank==0 || debug_mode) printf("local_ncols=%i is set, status=%i\n", n_loc, status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "nblk", NB, &status); // NB
-if (world_rank==0 || debug_mode) printf("nblk=%i is set, status=%i\n", NB, status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "mpi_comm_parent", MPI_Comm_c2f(MPI_COMM_WORLD), &status);
-if (world_rank==0 || debug_mode) printf("Fortran MPI communicator is set, status=%i\n", status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "process_row", myrow, &status); // myrow
-if (world_rank==0 || debug_mode) printf("process_row=%i is set, status=%i\n", myrow, status);
+assert(status == ELPA_OK);
 
 elpa_set(handle, "process_col", mycol, &status); // mycol
-if (world_rank==0 || debug_mode) printf("process_col=%i is set, status=%i\n", mycol, status);
+assert(status == ELPA_OK);
 
-// Step 6: Finialize the setup of mandatory parameters of the ELPA object (handle)
+elpa_set(handle, "timings", 1, &status); // if we want to calculate detailed ELPA timings
+assert(status == ELPA_OK);
+
+// Step 6: Finalize the setup of mandatory parameters of the ELPA object (handle)
 status = elpa_setup(handle);
 printf("ELPA setup done, status=%i\n", status);
 if (status!=ELPA_OK)
@@ -231,15 +227,10 @@ if (status!=ELPA_OK)
 
 // Step 7: set ELPA runtime options. They can be changed between different ELPA runs, e.g. elpa_eigenvectors() calls
 elpa_set(handle, "solver", ELPA_SOLVER_2STAGE, &status);
-if (world_rank==0 || debug_mode) 
-  {
-  printf("elpa_set solver done, status=%d \n", status);
-  }  
+assert(status == ELPA_OK);
 
 // End of Setup ELPA 
 //____________________________________________ 
-
-
 // Allocate the matrices A_loc, Z_loc(vector of eigenvalues), Eigenvalues
 double *A_loc, *Z_loc, *work, *Eigenvalues;
 A_loc = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
@@ -276,6 +267,7 @@ elpa_print_settings(handle, &status);
 
 MPI_Barrier(MPI_COMM_WORLD); // for timing
 double t_start = MPI_Wtime();
+elpa_timer_start(handle, (char*) "elpa_eigenvectors()"); // for detailed ELPA timings
 
 // A_loc=local part of the matrix to be diagonalized, input
 // Eigenvalues=global array of eigenvalues, output
@@ -291,7 +283,11 @@ if (status!=ELPA_OK)
 
 MPI_Barrier(MPI_COMM_WORLD);
 double t_stop = MPI_Wtime();
-	
+elpa_timer_stop(handle, (char*) "elpa_eigenvectors()"); // for detailed ELPA timings
+
+// Print detailed ELPA timings
+elpa_print_times(handle, (char*) "elpa_eigenvectors()");
+
 //____________________________________________ 
 // Print the results	
 
