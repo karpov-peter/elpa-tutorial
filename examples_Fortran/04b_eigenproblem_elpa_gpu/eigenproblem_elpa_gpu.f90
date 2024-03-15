@@ -1,4 +1,7 @@
-program eigenproblem_elpa
+! Description: This code solves the eigenproblem using ELPA library with GPU acceleration.
+! In this example, the host pointers are passed to the ELPA solver function
+
+program eigenproblem_elpa_gpu
   use mpi
   ! Step 1: use the ELPA module
   use elpa
@@ -19,7 +22,7 @@ program eigenproblem_elpa
   integer, parameter :: N_DEFAULT = 1000, NEV_DEFAULT = 500, NB_DEFAULT = 32
   integer :: N = N_DEFAULT, nev = NEV_DEFAULT, NB = NB_DEFAULT
   integer :: debug_mode = 0
-  
+
   integer :: world_rank, world_size
   integer :: iam, nprocs, ictxt, nprow, npcol, myrow, mycol
   integer :: np, nq, m_loc, n_loc, info, itemp, seed
@@ -127,8 +130,8 @@ program eigenproblem_elpa
   ! Setup ELPA 
   
   ! Step 3: initialize the ELPA library
-  if (elpa_init(20170403) /= ELPA_OK) then
-      print *, "ELPA API version not supported"
+  if (elpa_init(20231705) /= ELPA_OK) then
+    print *, "ELPA API version not supported"
     stop 1
   endif
   
@@ -176,9 +179,25 @@ program eigenproblem_elpa
     ! Handle this error in your application
   endif
 
+    ! ____________________________________________ 
+  ! Print ELPA settings
+  ! call elpaInstance%print_settings(status)
+
   ! Step 7: set runtime options, e.g. GPU settings
-  call elpaInstance%set("solver", ELPA_SOLVER_2STAGE, status)
+  call elpaInstance%set("solver", ELPA_SOLVER_1STAGE, status)
   ! Check status code ...
+  call elpaInstance%set("nvidia-gpu", 1, status) ! 1=on, 0=off
+  if (status /= ELPA_OK) then
+    print *, "Error while set nvidia-gpu=1"
+    ! Handle this error in your application
+  endif
+
+  status = elpaInstance%setup_gpu()
+  if (status /= ELPA_OK) then
+    print *, "Could not setup GPU for the ELPA object"
+    ! Handle this error in your application
+  endif
+  print *, "GPU is set up"
 
   ! End of Setup ELPA 
   ! ____________________________________________ 
