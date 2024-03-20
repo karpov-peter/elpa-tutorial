@@ -4,12 +4,10 @@
 #include <sys/time.h>
 #include <math.h>
 #include "mpi.h"
+#include <assert.h>
 
 // Step 1: include the ELPA header file
 #include <elpa/elpa.h>
-
-#include <assert.h>
-#define assert_elpa_ok(x) assert(x == ELPA_OK)
 
 static int max( int a, int b ){if (a>b) return(a); else return(b);}
 static int min( int a, int b ){if (a<b) return(a); else return(b);}
@@ -232,14 +230,14 @@ assert(status == ELPA_OK);
 // End of Setup ELPA 
 //____________________________________________ 
 // Allocate the matrices A_loc, Z_loc(vector of eigenvalues), Eigenvalues
-double *A_loc, *Z_loc, *work, *Eigenvalues;
+double *A_loc, *A_loc_copy, *Z_loc, *work, *Eigenvalues;
 A_loc = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
+A_loc_copy  = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
 Z_loc = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
 Eigenvalues = (double *)calloc(N,sizeof(double)) ;
   
 
 // Fill the local part of matrix A 
-int k = 0;
 int i_loc, j_loc;
 for(int i_loc=0; i_loc<m_loc; i_loc++) // iteration over rows of A_loc
     {
@@ -255,57 +253,64 @@ for(int i_loc=0; i_loc<m_loc; i_loc++) // iteration over rows of A_loc
 
         // ELPA assumes column-major matrix layout
         A_loc[i_loc+j_loc*m_loc] = get_global_matrix_element(I_gl, J_gl);
+        A_loc_copy[i_loc+j_loc*m_loc] = get_global_matrix_element(I_gl, J_gl);
         }
     }
 
 //____________________________________________ 
+// Setup autotune
 
 elpa_autotune_t autotune_handle;
 //elpa_autotune_set_api_version(handle, 20211125, &status); // THIS CAUSES ERROR!
-//assert(status == ELPA_OK);
-
-autotune_handle = elpa_autotune_setup(handle, ELPA_AUTOTUNE_FAST, ELPA_AUTOTUNE_DOMAIN_REAL, &status);
+//elpa_autotune_set_api_version(handle, 20231705, &status); // THIS CAUSES ERROR!
 assert(status == ELPA_OK);
 
+autotune_handle = elpa_autotune_setup(handle, ELPA_AUTOTUNE_MEDIUM, ELPA_AUTOTUNE_DOMAIN_REAL, &status);
+assert(status == ELPA_OK);
+
+//____________________________________________ 
+// Print ELPA settings
+elpa_print_settings(handle, &status);
 
 //____________________________________________ 
 // Step 8: Perform the diagonalization using ELPA
-int i, unfinished;
+int iter, unfinished;
+int iter_max = 100;
 
-for (i=1; i < 100; i++) {
-    printf("step i=%d\n", i);
+for (iter=1; iter <= iter_max; iter++) {
     unfinished = elpa_autotune_step(handle, autotune_handle, &status);
+    assert(status == ELPA_OK);
 
     if (unfinished == 0) {
         if (world_rank == 0) {
-       	    printf("ELPA autotuning finished in %d steps \n", i);
+       	    printf("ELPA autotuning finished in %d steps \n", iter-1);
         }
 	      break;
     }
+
+    // Solve EV problem
+    elpa_eigenvectors(handle, A_loc, Eigenvalues, Z_loc, &status);
+
+    // restore the matrix
+    for (int k = 0; k<m_loc*n_loc; k++) A_loc[k] = A_loc_copy[k];
     
     if (world_rank == 0) {
-	      printf("The current setting of the ELPA object: \n");
-        elpa_print_settings(handle, &status);
-
+        printf("iter=%d\n", iter);
         printf("The state of the autotuning: \n");
         elpa_autotune_print_state(handle, autotune_handle, &status);
-    }
-
-
-    /* Solve EV problem */
-    elpa_eigenvectors(handle, A_loc, Eigenvalues, Z_loc, &status);
+    }  
 }
 
 if (unfinished == 1) {
     if (world_rank == 0) {
-    printf("ELPA autotuning did not finished during %d steps\n", i);
+    printf("Warning: ELPA autotuning did not finish in %d steps\n", iter-1);
     }	     
 }
 
 elpa_autotune_set_best(handle, autotune_handle, &status);
 
 if (world_rank == 0) {
-    printf("The best combination found by the autotuning:\n");
+    printf("\n\nThe best combination found by the autotuning:\n");
     elpa_autotune_print_best(handle, autotune_handle, &status);
 }
 
@@ -329,6 +334,7 @@ elpa_uninit(&status);
 // Clean up the rest and finalize
 
 free(A_loc);
+free(A_loc_copy);
 free(Z_loc);
 free(Eigenvalues);
 

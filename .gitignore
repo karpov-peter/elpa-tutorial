@@ -8,3 +8,6 @@ pdgemm
 eigenproblem_scalapack
 eigenproblem_elpa
 eigenproblem_elpa_gpu
+eigenproblem_elpa_autotuning
+saved_state*
+log*
