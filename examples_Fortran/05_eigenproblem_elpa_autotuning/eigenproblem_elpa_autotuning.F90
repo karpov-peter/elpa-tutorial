@@ -224,7 +224,7 @@ program eigenproblem_elpa
 
   ! if you want to use the new autotuning implentation
   !call elpaInstance%autotune_set_api_version(20211125, status) ! THIS CAUSES ERROR!
-  call elpaInstance%autotune_set_api_version(20170403, status) ! THIS CAUSES ERROR!
+  call elpaInstance%autotune_set_api_version(20170403, status) ! THIS works
   
   call assert(status == ELPA_OK)
   ! if you want to use the old one, either do not set autotune_set_api_version
