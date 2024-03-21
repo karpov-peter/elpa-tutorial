@@ -220,7 +220,7 @@ if (world_rank==0 || debug_mode) printf("process_row=%i is set, status=%i\n", my
 elpa_set(handle, "process_col", mycol, &status); // mycol
 if (world_rank==0 || debug_mode) printf("process_col=%i is set, status=%i\n", mycol, status);
 
-// Step 6: Finialize the setup of mandatory parameters of the ELPA object (handle)
+// Step 6: Finalize the setup of mandatory parameters of the ELPA object (handle)
 status = elpa_setup(handle);
 printf("ELPA setup done, status=%i\n", status);
 if (status!=ELPA_OK)
