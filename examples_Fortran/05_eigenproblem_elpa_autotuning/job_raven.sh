@@ -13,7 +13,7 @@
 
 #SBATCH --mem=12G
 #SBATCH --mail-type=ALL
-#SBATCH --time=00:03:00
+#SBATCH --time=00:05:00
 
 source compile_raven.sh
 

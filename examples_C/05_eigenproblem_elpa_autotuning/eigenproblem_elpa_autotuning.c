@@ -4,12 +4,10 @@
 #include <sys/time.h>
 #include <math.h>
 #include "mpi.h"
+#include <assert.h>
 
 // Step 1: include the ELPA header file
 #include <elpa/elpa.h>
-
-#include <assert.h>
-#define assert_elpa_ok(x) assert(x == ELPA_OK)
 
 static int max( int a, int b ){if (a>b) return(a); else return(b);}
 static int min( int a, int b ){if (a<b) return(a); else return(b);}
@@ -168,7 +166,7 @@ elpa_t handle;
 int status;
 
 // Step 3: initialize the ELPA library
-status = elpa_init(20170403);   
+status = elpa_init(20231705); 
 if (status != ELPA_OK) 
 	{
 	fprintf(stderr, "Error: ELPA API version not supported");
@@ -229,17 +227,23 @@ if (status!=ELPA_OK)
 elpa_set(handle, "solver", ELPA_SOLVER_2STAGE, &status);
 assert(status == ELPA_OK);
 
+elpa_set(handle, "nvidia-gpu", 0, &status);
+assert(status == ELPA_OK);
+
+elpa_set(handle, "intel-gpu", 0, &status);
+assert(status == ELPA_OK);
+
 // End of Setup ELPA 
 //____________________________________________ 
 // Allocate the matrices A_loc, Z_loc(vector of eigenvalues), Eigenvalues
-double *A_loc, *Z_loc, *work, *Eigenvalues;
+double *A_loc, *A_loc_copy, *Z_loc, *work, *Eigenvalues;
 A_loc = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
+A_loc_copy  = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
 Z_loc = (double *)calloc(m_loc*n_loc,sizeof(double)) ;
 Eigenvalues = (double *)calloc(N,sizeof(double)) ;
   
 
 // Fill the local part of matrix A 
-int k = 0;
 int i_loc, j_loc;
 for(int i_loc=0; i_loc<m_loc; i_loc++) // iteration over rows of A_loc
     {
@@ -255,8 +259,21 @@ for(int i_loc=0; i_loc<m_loc; i_loc++) // iteration over rows of A_loc
 
         // ELPA assumes column-major matrix layout
         A_loc[i_loc+j_loc*m_loc] = get_global_matrix_element(I_gl, J_gl);
+        A_loc_copy[i_loc+j_loc*m_loc] = get_global_matrix_element(I_gl, J_gl);
         }
     }
+
+//____________________________________________ 
+// Setup autotune
+
+elpa_autotune_t autotune_handle;
+//elpa_autotune_set_api_version(handle, 20231705, &status); // THIS CAUSES ERROR!
+elpa_autotune_set_api_version(handle, 20211125, &status); // THIS CAUSES ERROR!
+//elpa_autotune_set_api_version(handle, 20170403, &status); // THIS CAUSES ERROR!
+assert(status == ELPA_OK);
+
+autotune_handle = elpa_autotune_setup(handle, ELPA_AUTOTUNE_MEDIUM, ELPA_AUTOTUNE_DOMAIN_REAL, &status);
+assert(status == ELPA_OK);
 
 //____________________________________________ 
 // Print ELPA settings
@@ -264,74 +281,67 @@ elpa_print_settings(handle, &status);
 
 //____________________________________________ 
 // Step 8: Perform the diagonalization using ELPA
+int iter, unfinished;
+int iter_max = 100;
 
-MPI_Barrier(MPI_COMM_WORLD); // for timing
-double t_start = MPI_Wtime();
-elpa_timer_start(handle, (char*) "elpa_eigenvectors()"); // for detailed ELPA timings
+for (iter=1; iter <= iter_max; iter++) {
+    unfinished = elpa_autotune_step(handle, autotune_handle, &status);
+    assert(status == ELPA_OK);
 
-// A_loc=local part of the matrix to be diagonalized, input
-// Eigenvalues=global array of eigenvalues, output
-// Z_loc=matrix of eigenvectors (contained as columns), output
-elpa_eigenvectors(handle, A_loc, Eigenvalues, Z_loc, &status); 
+    if (unfinished == 0) {
+        if (world_rank == 0) {
+       	    printf("ELPA autotuning finished in %d steps \n", iter-1);
+        }
+	      break;
+    }
 
-if (status!=ELPA_OK)
-  {
-  printf("elpa_eigenvectors() failed, status=%i\n", status);
-  MPI_Finalize();
-  return(1);
-  }
+    // Solve EV problem
+    elpa_eigenvectors(handle, A_loc, Eigenvalues, Z_loc, &status);
 
-MPI_Barrier(MPI_COMM_WORLD);
-double t_stop = MPI_Wtime();
-elpa_timer_stop(handle, (char*) "elpa_eigenvectors()"); // for detailed ELPA timings
+    // restore the matrix
+    for (int k = 0; k<m_loc*n_loc; k++) A_loc[k] = A_loc_copy[k];
+    
+    if (world_rank == 0) {
+        printf("iter=%d\n", iter);
+        printf("The state of the autotuning: \n");
+        elpa_autotune_print_state(handle, autotune_handle, &status);
+    }  
+}
 
-// Print detailed ELPA timings
-if (world_rank==0) elpa_print_times(handle, (char*) "elpa_eigenvectors()");
+if (unfinished == 1) {
+    if (world_rank == 0) {
+    printf("Warning: ELPA autotuning did not finish in %d steps\n", iter-1);
+    }	     
+}
+
+elpa_autotune_set_best(handle, autotune_handle, &status);
+
+if (world_rank == 0) {
+    printf("\n\nThe best combination found by the autotuning:\n");
+    elpa_autotune_print_best(handle, autotune_handle, &status);
+}
 
 //____________________________________________ 
 // Print the results	
 
 if (world_rank==0)
   {
-  printf("Diagonalization is done\n");
+  printf("Autotuning is done\n");
   
-  int N_print = min(10, nev);
-  printf("First %d eigenvalues: \n", N_print);
-  int i; // for old Intel compilers
-  for (i=0; i<N_print; i++) printf("%g ",Eigenvalues[i]);
-  printf("\n");
-  
-  if (matrix_type==Symmetrized_Clement)
-    {
-    printf("Absolute diff of eigenvalues wrt to analytic ones: \n");
-    for (i=0; i<N_print; i++) printf("%.16g ", Eigenvalues[i] - (-N+1+2*i) );
-
-    for (i=0; i<nev; i++) 
-      {
-      if(fabs(Eigenvalues[i] - (-N+1+2*i))> 1e-10)
-        {
-        printf("Eigenvalue %d is wrong: %g\n", i, Eigenvalues[i]);
-        MPI_Finalize();
-        return(1);
-        }
-      }
-    
-    printf("\n");
-    }
-  
-  printf("Diagonalization time (sec): \n%g\n", t_stop-t_start);
   }
 
 //____________________________________________ 
 // Step 9: Clean up ELPA
 
 elpa_deallocate(handle, &status);
+elpa_autotune_deallocate(autotune_handle, &status);
 elpa_uninit(&status);
 
 //____________________________________________ 
 // Clean up the rest and finalize
 
 free(A_loc);
+free(A_loc_copy);
 free(Z_loc);
 free(Eigenvalues);
 

@@ -13,7 +13,7 @@
 
 #SBATCH --mem=12G
 #SBATCH --mail-type=ALL
-#SBATCH --time=00:03:00
+#SBATCH --time=00:10:00
 
 source compile_raven.sh
 
@@ -25,4 +25,4 @@ set -v
 #export OMP_PLACES=cores
 
 
-srun $FileName 10000 10000 32
+srun $FileName 10000
